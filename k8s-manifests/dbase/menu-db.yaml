@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: menu-db-pvc
+  namespace: food-app
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: menu-db
+  namespace: food-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: menu-db
+  template:
+    metadata:
+      labels:
+        app: menu-db
+    spec:
+      containers:
+      - name: menu-db
+        image: postgres:14
+        ports:
+          - containerPort: 5432
+        env:
+          - name: POSTGRES_USER
+            value: admin
+          - name: POSTGRES_PASSWORD
+            value: password
+          - name: POSTGRES_DB
+            value: menudb
+        volumeMounts:
+          - mountPath: /var/lib/postgresql/data
+            name: menu-db-storage
+      volumes:
+        - name: menu-db-storage
+          persistentVolumeClaim:
+            claimName: menu-db-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: menu-db
+  namespace: food-app
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+  selector:
+    app: menu-db
+

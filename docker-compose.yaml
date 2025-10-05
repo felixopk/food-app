@@ -1,0 +1,62 @@
+version: "3.8"
+
+services:
+  # Order Service Database (PostgreSQL)
+  order-db:
+    image: postgres:15
+    container_name: order-db
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: orderdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - order-data:/var/lib/postgresql/data
+
+  # User Service Database (MySQL)
+  user-db:
+    image: mysql:8
+    container_name: user-db
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: userdb
+      MYSQL_USER: admin
+      MYSQL_PASSWORD: password
+    ports:
+      - "3306:3306"
+    volumes:
+      - user-data:/var/lib/mysql
+
+  # Menu Service Database (PostgreSQL)
+  menu-db:
+    image: postgres:15
+    container_name: menu-db
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: menudb
+    ports:
+      - "5433:5432"
+    volumes:
+      - menu-data:/var/lib/postgresql/data
+
+  # Payment Service Database (MySQL)
+  payment-db:
+    image: mysql:8
+    container_name: payment-db
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: paymentdb
+      MYSQL_USER: admin
+      MYSQL_PASSWORD: password
+    ports:
+      - "3307:3306"
+    volumes:
+      - payment-data:/var/lib/mysql
+
+volumes:
+  order-data:
+  user-data:
+  menu-data:
+  payment-data:

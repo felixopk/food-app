@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: payment-db-pvc
+  namespace: food-app
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-db
+  namespace: food-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app:  payment-db
+  template:
+    metadata:
+      labels:
+        app: payment-db
+    spec:
+      containers:
+      - name: payment-db
+        image: mysql:8
+        ports:
+          - containerPort: 3306
+        env:
+          - name: MYSQL_ROOT_PASSWORD
+            value: rootpassword
+          - name: MYSQL_USER
+            value: admin
+          - name: MYSQL_PASSWORD
+            value: password
+          - name: MYSQL_DATABASE
+            value: paymentdb
+        volumeMounts:
+          - mountPath: /var/lib/mysql
+            name: payment-db-storage
+      volumes:
+        - name: payment-db-storage
+          persistentVolumeClaim:
+            claimName: payment-db-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment-db
+  namespace: food-app
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3306
+  selector:
+    app: payment-db
