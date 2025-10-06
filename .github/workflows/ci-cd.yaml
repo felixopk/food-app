@@ -1,0 +1,178 @@
+name: Secure CI/CD with ArgoCD (Auto-sync + rollback)
+
+on:
+  push:
+    branches: [ main, master ]
+    paths-ignore:
+      - 'k8s-manifests/*.yaml'
+      - '*.md'
+      - 'docs/**'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}
+  K8S_MANIFEST_DIR: k8s-manifests
+  ARGOCD_APP: food-app   # change to your ArgoCD application name
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    name: Build & Push Docker Images (matrix)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [menu-service, order-service, payment-service, user-service]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build + Push
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: ./src/${{ matrix.service }}
+          file: ./src/${{ matrix.service }}/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Emit image info
+        run: |
+          echo "service=${{ matrix.service }}" >> $GITHUB_OUTPUT
+          echo "image=${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:${{ github.sha }}" >> $GITHUB_OUTPUT
+        # note: using SHA-tagging in manifests update next
+
+  update-and-deploy:
+    name: Update Manifests, Push, ArgoCD Sync & Wait (with rollback)
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    environment: production
+    steps:
+      - name: Checkout (full repo)
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Set Git author
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "${{ secrets.GH_EMAIL || 'github-actions[bot]@users.noreply.github.com' }}"
+
+      - name: Compute SHORT_SHA
+        id: short
+        run: echo "SHORT_SHA=$(echo $GITHUB_SHA | cut -c1-7)" >> $GITHUB_OUTPUT
+
+      - name: Update k8s manifest image tags
+        run: |
+          SHORT=${{ steps.short.outputs.SHORT_SHA }}
+          OWNER=${{ github.repository_owner }}
+          for svc in menu-service order-service payment-service user-service; do
+            FILE="${{ env.K8S_MANIFEST_DIR }}/${svc}-deployment.yaml"
+            if [ -f "$FILE" ]; then
+              echo "Updating $FILE -> ${OWNER}/${svc}:main-${SHORT}"
+              sed -i -E "s|(ghcr.io/${OWNER}/${svc}):[^\s\"']+|\1:main-${SHORT}|g" "$FILE"
+            fi
+          done
+
+      - name: Commit & push manifest updates
+        run: |
+          git add ${{ env.K8S_MANIFEST_DIR }}/*.yaml || true
+          if git diff --staged --quiet; then
+            echo "No manifest changes to commit."
+          else
+            git commit -m "chore(ci): update manifest image tags ${GITHUB_SHA}"
+            git push origin HEAD
+          fi
+
+      - name: Install argocd CLI
+        run: |
+          curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          chmod +x /usr/local/bin/argocd
+
+      - name: Trigger ArgoCD sync
+        id: argosync
+        env:
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+          ARGOCD_TOKEN: ${{ secrets.ARGOCD_TOKEN }}
+        run: |
+          # Trigger sync
+          argocd app sync ${{ env.ARGOCD_APP }} --server $ARGOCD_SERVER --auth-token $ARGOCD_TOKEN --grpc-web
+          # Wait for sync to start & then for resources to become healthy (timeout 3 minutes)
+          set -o pipefail
+          if ! argocd app wait ${{ env.ARGOCD_APP }} --server $ARGOCD_SERVER --auth-token $ARGOCD_TOKEN --grpc-web --health --timeout 180; then
+            echo "ArgoCD sync/health check failed or timed out" >&2
+            exit 2
+          fi
+          echo "ArgoCD sync and health ok."
+
+      - name: On failure: rollback to previous revision (runs only if previous step failed)
+        if: failure()
+        env:
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+          ARGOCD_TOKEN: ${{ secrets.ARGOCD_TOKEN }}
+        run: |
+          echo "Attempting automated rollback for app ${{ env.ARGOCD_APP }}..."
+          # Install jq for JSON parsing
+          apt-get update && apt-get install -y jq
+          # Get history JSON: first element is current revision, second is previous
+          HIST_JSON=$(argocd app history ${{ env.ARGOCD_APP }} --server $ARGOCD_SERVER --auth-token $ARGOCD_TOKEN --grpc-web --output json)
+          PREV_REV=$(echo "$HIST_JSON" | jq -r '.[1].revision // empty')
+          if [ -z "$PREV_REV" ]; then
+            echo "No previous revision found; cannot rollback automatically." >&2
+            exit 1
+          fi
+          echo "Rolling back to revision: $PREV_REV"
+          argocd app rollback ${{ env.ARGOCD_APP }} "$PREV_REV" --server $ARGOCD_SERVER --auth-token $ARGOCD_TOKEN --grpc-web
+          # Wait again for health after rollback
+          if ! argocd app wait ${{ env.ARGOCD_APP }} --server $ARGOCD_SERVER --auth-token $ARGOCD_TOKEN --grpc-web --health --timeout 180; then
+            echo "Rollback completed but application still unhealthy. Manual intervention required." >&2
+            exit 1
+          fi
+          echo "Rollback successful; application healthy."
+
+  optional-create-imagepullsecret:
+    name: Create imagePullSecret in cluster (optional)
+    runs-on: ubuntu-latest
+    needs: update-and-deploy
+    if: ${{ secrets.KUBECONFIG != '' }}
+    steps:
+      - name: Decode kubeconfig
+        run: |
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > /tmp/kubeconfig
+          export KUBECONFIG=/tmp/kubeconfig
+          kubectl version --client
+      - name: Create/update imagePullSecret
+        run: |
+          kubectl delete secret ghcr-pull-secret -n food-app --ignore-not-found
+          kubectl create secret docker-registry ghcr-pull-secret \
+            --docker-server=ghcr.io \
+            --docker-username=${{ github.repository_owner }} \
+            --docker-password=${{ secrets.GHCR_TOKEN }} \
+            --docker-email="${{ secrets.GH_EMAIL || 'github-actions[bot]@users.noreply.github.com' }}" \
+            -n food-app
+          echo "Created ghcr-pull-secret in namespace food-app"

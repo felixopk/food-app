@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: menu-deployment
+  namespace: food-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: menu-deployment
+  template:
+    metadata:
+      labels:
+        app: menu-deployment
+    spec:
+      imagePullSecrets:
+      - name: ghcr-secret
+      containers:
+      - name: menu-deployment
+        image: ghcr.io/felixopk/menu-service:latest
+        imagePullPolicy: Always
+        ports:
+          - containerPort: 3000
+        env:
+          - name: DB_USER
+            valueFrom:
+              secretKeyRef:
+                name: menu-db-secret
+                key: username
+          - name: DB_PASS
+            valueFrom:
+              secretKeyRef:
+                name: menu-db-secret
+                key: password
+          - name: DB_HOST
+            valueFrom:
+              secretKeyRef:
+                name: menu-db-secret
+                key: host
+          - name: DB_PORT
+            valueFrom:
+              secretKeyRef:
+                name: menu-db-secret
+                key: port
+          - name: DB_NAME
+            valueFrom:
+              secretKeyRef:
+                name: menu-db-secret
+                key: database
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: menu-service
+  namespace: food-app
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: 3000
+  selector:
+    app: menu-deployment

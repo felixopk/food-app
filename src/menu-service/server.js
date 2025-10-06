@@ -17,7 +17,7 @@ const pool = new Pool({
 app.get('/', async (req, res) => {
   try {
     const result = await pool.query('SELECT NOW()');
-    res.send(`Menu Service is running. DB Time: ${result.rows[0].now}`);
+    res.send(`Menu Service is at running. DB Time: ${result.rows[0].now}`);
   } catch (err) {
     res.status(500).send('Database connection failed: ' + err.message);
   }

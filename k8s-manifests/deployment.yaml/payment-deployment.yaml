@@ -1,23 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: user-deployment
+  name: payment-deployment
   namespace: food-app
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: user-service
+      app: payment-deployment
   template:
     metadata:
       labels:
-        app: user-service
-
+        app: payment-deployment
     spec:
       containers:
-        - name: user-service
-
-          image: ghcr.io/felixopk/user-service:latest
+        - name: payment-deployment
+          image: ghcr.io/felixopk/payment-service:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
@@ -25,27 +23,27 @@ spec:
             - name: DB_USER
               valueFrom:
                 secretKeyRef:
-                  name: user-db-secret
+                  name: payment-db-secret
                   key: username
             - name: DB_PASS
               valueFrom:
                 secretKeyRef:
-                  name: user-db-secret
+                  name: payment-db-secret
                   key: password
             - name: DB_HOST
               valueFrom:
                 secretKeyRef:
-                  name: user-db-secret
+                  name: payment-db-secret
                   key: host
             - name: DB_PORT
               valueFrom:
                 secretKeyRef:
-                  name: user-db-secret
+                  name: payment-db-secret
                   key: port
             - name: DB_NAME
               valueFrom:
                 secretKeyRef:
-                  name: user-db-secret
+                  name: payment-db-secret
                   key: database
       imagePullSecrets:
         - name: ghcr-secret
