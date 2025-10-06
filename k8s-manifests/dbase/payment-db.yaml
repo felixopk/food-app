@@ -19,7 +19,7 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      app:  payment-db
+      app: payment-db
   template:
     metadata:
       labels:
@@ -32,13 +32,25 @@ spec:
           - containerPort: 3306
         env:
           - name: MYSQL_ROOT_PASSWORD
-            value: rootpassword
+            valueFrom:
+              secretKeyRef:
+                name: payment-db-credentials
+                key: mysql-root-password
           - name: MYSQL_USER
-            value: admin
+            valueFrom:
+              secretKeyRef:
+                name: payment-db-credentials
+                key: mysql-user
           - name: MYSQL_PASSWORD
-            value: password
+            valueFrom:
+              secretKeyRef:
+                name: payment-db-credentials
+                key: mysql-password
           - name: MYSQL_DATABASE
-            value: paymentdb
+            valueFrom:
+              secretKeyRef:
+                name: payment-db-credentials
+                key: mysql-database
         volumeMounts:
           - mountPath: /var/lib/mysql
             name: payment-db-storage
