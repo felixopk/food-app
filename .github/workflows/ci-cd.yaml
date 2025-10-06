@@ -2,7 +2,7 @@ name: Secure CI/CD with ArgoCD (Auto-sync + rollback)
 
 on:
   push:
-    branches: [ main]
+    branches: [ main ]
     paths-ignore:
       - 'k8s-manifests/deployment.yaml/*.yaml'
       - '*.md'
@@ -12,7 +12,7 @@ env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}
   K8S_MANIFEST_DIR: k8s-manifests
-  ARGOCD_APP: food-app   # change to your ArgoCD application name
+  ARGOCD_APP: food-app
 
 permissions:
   contents: read
@@ -65,7 +65,6 @@ jobs:
         run: |
           echo "service=${{ matrix.service }}" >> $GITHUB_OUTPUT
           echo "image=${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:${{ github.sha }}" >> $GITHUB_OUTPUT
-        # note: using SHA-tagging in manifests update next
 
   update-and-deploy:
     name: Update Manifests, Push, ArgoCD Sync & Wait (with rollback)
@@ -120,9 +119,7 @@ jobs:
           ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
           ARGOCD_TOKEN: ${{ secrets.ARGOCD_TOKEN }}
         run: |
-          # Trigger sync
           argocd app sync ${{ env.ARGOCD_APP }} --server $ARGOCD_SERVER --auth-token $ARGOCD_TOKEN --grpc-web
-          # Wait for sync to start & then for resources to become healthy (timeout 3 minutes)
           set -o pipefail
           if ! argocd app wait ${{ env.ARGOCD_APP }} --server $ARGOCD_SERVER --auth-token $ARGOCD_TOKEN --grpc-web --health --timeout 180; then
             echo "ArgoCD sync/health check failed or timed out" >&2
@@ -130,15 +127,13 @@ jobs:
           fi
           echo "ArgoCD sync and health ok."
 
-      - name: On failure: rollback to previous revision (runs only if previous step failed)
+      - name: On failure - rollback to previous revision
         if: failure()
         env:
           ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
           ARGOCD_TOKEN: ${{ secrets.ARGOCD_TOKEN }}
         run: |
           echo "Attempting automated rollback for app ${{ env.ARGOCD_APP }}..."
-         
-          # Get history JSON: first element is current revision, second is previous
           HIST_JSON=$(argocd app history ${{ env.ARGOCD_APP }} --server $ARGOCD_SERVER --auth-token $ARGOCD_TOKEN --grpc-web --output json)
           PREV_REV=$(echo "$HIST_JSON" | jq -r '.[1].revision // empty')
           if [ -z "$PREV_REV" ]; then
@@ -147,7 +142,6 @@ jobs:
           fi
           echo "Rolling back to revision: $PREV_REV"
           argocd app rollback ${{ env.ARGOCD_APP }} "$PREV_REV" --server $ARGOCD_SERVER --auth-token $ARGOCD_TOKEN --grpc-web
-          # Wait again for health after rollback
           if ! argocd app wait ${{ env.ARGOCD_APP }} --server $ARGOCD_SERVER --auth-token $ARGOCD_TOKEN --grpc-web --health --timeout 180; then
             echo "Rollback completed but application still unhealthy. Manual intervention required." >&2
             exit 1
@@ -165,6 +159,7 @@ jobs:
           echo "${{ secrets.KUBECONFIG }}" | base64 -d > /tmp/kubeconfig
           export KUBECONFIG=/tmp/kubeconfig
           kubectl version --client
+
       - name: Create/update imagePullSecret
         run: |
           kubectl delete secret ghcr-pull-secret -n food-app --ignore-not-found
