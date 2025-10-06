@@ -2,7 +2,7 @@ name: Secure CI/CD with ArgoCD (Auto-sync + rollback)
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main]
     paths-ignore:
       - 'k8s-manifests/*.yaml'
       - '*.md'
