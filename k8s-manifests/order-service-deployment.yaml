@@ -17,7 +17,7 @@ spec:
         - name: ghcr-secret
       containers:
       - name: order-deployment
-        image: ghcr.io/felixopk/order-service:main-cea0314st
+        image: ghcr.io/felixopk/order-service:main-82b6d31st
         imagePullPolicy: Always
         ports:
           - containerPort: 3000
