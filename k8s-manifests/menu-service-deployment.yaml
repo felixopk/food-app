@@ -17,7 +17,7 @@ spec:
       - name: ghcr-secret
       containers:
       - name: menu-deployment
-        image: ghcr.io/felixopk/menu-service:main-bbd82b4st
+        image: ghcr.io/felixopk/menu-service:main-bd6b230st
         imagePullPolicy: Always
         ports:
           - containerPort: 3000
