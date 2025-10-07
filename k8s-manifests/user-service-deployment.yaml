@@ -17,7 +17,7 @@ spec:
       containers:
         - name: user-service
 
-          image: ghcr.io/felixopk/user-service:main-1e686c7st
+          image: ghcr.io/felixopk/user-service:main-5a12b3fst
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
