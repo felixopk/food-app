@@ -198,25 +198,35 @@ jobs:
           fi
           echo "Rollback successful; application healthy."
 
-  optional-create-imagepullsecret:
-    name: Create imagePullSecret in cluster (optional)
-    runs-on: ubuntu-latest
-    needs: update-and-deploy
-    if: ${{ secrets.KUBECONFIG != '' }}
-    steps:
-      - name: Decode kubeconfig
-        run: |
-          echo "${{ secrets.KUBECONFIG }}" | base64 -d > /tmp/kubeconfig
-          export KUBECONFIG=/tmp/kubeconfig
-          kubectl version --client
+ optional-create-imagepullsecret:
+  name: Create imagePullSecret in cluster (optional)
+  runs-on: ubuntu-latest
+  needs: update-and-deploy
+  steps:
+    - name: Check if KUBECONFIG secret exists
+      id: check_secret
+      run: |
+        if [ -z "${{ secrets.KUBECONFIG }}" ]; then
+          echo "skip=true" >> $GITHUB_OUTPUT
+        else
+          echo "skip=false" >> $GITHUB_OUTPUT
+        fi
 
-      - name: Create/update imagePullSecret
-        run: |
-          kubectl delete secret ghcr-pull-secret -n food-app --ignore-not-found
-          kubectl create secret docker-registry ghcr-pull-secret \
-            --docker-server=ghcr.io \
-            --docker-username=${{ github.repository_owner }} \
-            --docker-password=${{ secrets.GHCR_TOKEN }} \
-            --docker-email="${{ secrets.GH_EMAIL || 'github-actions[bot]@users.noreply.github.com' }}" \
-            -n food-app
-          echo "Created ghcr-pull-secret in namespace food-app"
+    - name: Decode kubeconfig
+      if: steps.check_secret.outputs.skip == 'false'
+      run: |
+        echo "${{ secrets.KUBECONFIG }}" | base64 -d > /tmp/kubeconfig
+        export KUBECONFIG=/tmp/kubeconfig
+        kubectl version --client
+
+    - name: Create/update imagePullSecret
+      if: steps.check_secret.outputs.skip == 'false'
+      run: |
+        kubectl delete secret ghcr-pull-secret -n food-app --ignore-not-found
+        kubectl create secret docker-registry ghcr-pull-secret \
+          --docker-server=ghcr.io \
+          --docker-username=${{ github.repository_owner }} \
+          --docker-password=${{ secrets.GHCR_TOKEN }} \
+          --docker-email="${{ secrets.GH_EMAIL || 'github-actions[bot]@users.noreply.github.com' }}" \
+          -n food-app
+        echo "✅ Created ghcr-pull-secret in namespace food-app"
