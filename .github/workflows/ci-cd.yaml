@@ -150,7 +150,10 @@ jobs:
 
       - name: Commit & push manifest updates
         run: |
-          git add ${{ env.K8S_MANIFEST_DIR }}/*.yaml || true
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main || true
+          git add k8s-manifests/*.yaml || true
           if git diff --staged --quiet; then
             echo "No manifest changes to commit."
           else
@@ -158,7 +161,7 @@ jobs:
             git push origin HEAD
           fi
 
-      - name: Install argocd CLI
+      - name: Install argocd CLI  
         run: |
           curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
           chmod +x /usr/local/bin/argocd
