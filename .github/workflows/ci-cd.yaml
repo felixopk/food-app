@@ -158,23 +158,5 @@ jobs:
             git push origin HEAD
           fi
 
-      - name: Install argocd CLI
-        run: |
-          curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
-          chmod +x /usr/local/bin/argocd
-
-      - name: Trigger ArgoCD sync
-        id: argosync
-        env:
-          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
-          ARGOCD_TOKEN: ${{ secrets.ARGOCD_TOKEN }}
-        run: |
-          argocd app sync ${{ env.ARGOCD_APP }} --server $ARGOCD_SERVER --auth-token $ARGOCD_TOKEN --grpc-web
-          set -o pipefail
-          if ! argocd app wait ${{ env.ARGOCD_APP }} --server $ARGOCD_SERVER --auth-token $ARGOCD_TOKEN --grpc-web --health --timeout 180; then
-            echo "ArgoCD sync/health check failed or timed out" >&2
-            exit 2
-          fi
-          echo "ArgoCD sync and health ok."
-
+    
       
