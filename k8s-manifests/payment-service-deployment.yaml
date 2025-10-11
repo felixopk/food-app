@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: payment-deployment
-          image: ghcr.io/felixopk/payment-service:main-87b5a36st
+          image: ghcr.io/felixopk/payment-service:main-6218faest
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
