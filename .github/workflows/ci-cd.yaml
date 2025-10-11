@@ -1,4 +1,4 @@
-name: Secure CI/CD with ArgoCD (Auto-sync + rollback)
+name: Secure CI/CD with ArgoCD 
 
 on:
   push:
